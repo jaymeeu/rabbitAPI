@@ -18,6 +18,7 @@ app.use(cors());
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+
 //insert into doe table
 app.post("/insertDoe", async (req, res) => {
   const {name, type,cageNo, description } = req.body;
@@ -65,7 +66,7 @@ app.post("/insertDoe", async (req, res) => {
 
   // get all doe
 app.get("/getDoes", async (req, res) => {
-    const sqlSelect = "SELECT * FROM doelist";
+    const sqlSelect = "SELECT * FROM doelist ORDER BY id DESC";
     await db.query(sqlSelect, (err, result) => {
         res.send(result);
     });
@@ -112,7 +113,7 @@ app.get("/getDoes", async (req, res) => {
 
   //get all bucks
 app.get("/getBucks", async (req, res) => {
-    const sqlSelect = "SELECT * FROM bucklist";
+    const sqlSelect = "SELECT * FROM bucklist ORDER BY id DESC";
     await db.query(sqlSelect, (err, result) => {
         res.send(result);
     });
@@ -120,7 +121,7 @@ app.get("/getBucks", async (req, res) => {
 
   app.post("/insertKitten", async (req, res) => {
     const {category, type, pDoe, pBuck, mKitten, fKitten, tKitten, description, dateProduced } = req.body;
-    const sqlInsert = "INSERT INTO kittenlist (categoryName, parentDoe, parentBuck, description, type, count, numberMale, numberFemale, dateProduced ) VALUES (?,?,?,?,?,?,?,?,?)";
+    const sqlInsert = "INSERT INTO kittenlist (name, parentDoe, parentBuck, description, type, count, numberMale, numberFemale, dateProduced ) VALUES (?,?,?,?,?,?,?,?,?)";
     await db.query(sqlInsert, [category, pDoe, pBuck, description, type,tKitten, mKitten, fKitten, dateProduced  ], (err, result) => {
         console.log(err);
     });
@@ -134,7 +135,7 @@ app.get("/getBucks", async (req, res) => {
   }); 
 
   app.get("/getKittens", async (req, res) => {
-    const sqlSelect = "SELECT * FROM kittenlist";
+    const sqlSelect = "SELECT * FROM kittenlist ORDER BY id DESC";
     await db.query(sqlSelect, (err, result) => {
         res.send(result);
     });
@@ -142,7 +143,7 @@ app.get("/getBucks", async (req, res) => {
 
   app.post("/getKit", async (req, res) => {
     const kittenName = req.body.kittenName;
-    const sqlSelect = "SELECT * FROM kittenlist WHERE categoryName = ? ";
+    const sqlSelect = "SELECT * FROM kittenlist WHERE name = ? ";
     await db.query(sqlSelect, kittenName, (err, result) => {
         res.send(result);
     });
@@ -173,13 +174,14 @@ app.put("/updateBuck", async (req, res) => {
 
 // update doe state
 app.put("/updateDoe", async (req, res) => {
-  const {rabbitName, rabbitState, selectedState, dateCrossed, selectedDate, mkit, fkit, tmale, tfemale, tkitten} = req.body;
+  
+  const {rabbitName, rabbitState, selectedState, dateCrossed, selectedDate, buckBredWith, kitten, tkitten, description, kitCategory} = req.body;
   if (rabbitState == "Bred"){
     if(selectedState == "Available"){
       const sqlUpdate = "UPDATE doelist SET state = ? WHERE name = ? ";
       await db.query(sqlUpdate, [selectedState, rabbitName], (err, result) => {
           res.send(result);
-      });
+      }); 
 
       const date = new Date().toString();
       const activity = `${rabbitName} state is changed to ${selectedState}`
@@ -232,6 +234,7 @@ app.put("/updateDoe", async (req, res) => {
       }
     else
       {
+        //get doe tracker
         const getDoeTrack = "SELECT * FROM tracker WHERE form = ?"
         db.query(getDoeTrack, "Doe", (fail, pass)=> {
             const removeNest = parseInt(pass[0].removeNest)
@@ -245,29 +248,177 @@ app.put("/updateDoe", async (req, res) => {
             okToRebreedDate.setDate(okToRebreedDate.getDate() + (removeNest + okToRebreed));
             const okToRebreedDates = okToRebreedDate.toString();
 
-            const totalKit = parseInt(mkit) + parseInt(fkit);
-            const newFTotal = parseInt(fkit) + parseInt(tfemale);
-            const newTmale = parseInt(mkit) + parseInt(tmale);
-            const newTotal = parseInt(tkitten) + totalKit;
-            const sqlUpdateDoe = "UPDATE doelist SET state = ?, actualDelivery = ?, removeNest = ?, okToRebreed = ?, lastKit = ?, lastMale = ?, lastFemale = ?, totalMale = ?, totalFemale = ?, totalKit = ? WHERE name = ? ";
-           db.query(sqlUpdateDoe, [selectedState, selectedDate, removeNestDates, okToRebreedDates, totalKit, mkit, fkit, newTmale, newFTotal, newTotal, rabbitName ], (err, result) => {
-             console.log(err)
-           }); 
+           
+            const newTotal = parseInt(tkitten) + parseInt(kitten);
 
-           const date = new Date().toString();
-            const activity = `${rabbitName} state is changed to ${selectedState}`
-            const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
-            db.query(sqlActivity, [activity, date], (err, result) => {
-              
-            });
+            //update doe state and set it values 
+            const sqlUpdateDoe = "UPDATE doelist SET state = ?, actualDelivery = ?, removeNest = ?, okToRebreed = ?, lastKit = ?, totalKit = ? WHERE name = ? ";
+           db.query(sqlUpdateDoe, [selectedState, selectedDate, removeNestDates, okToRebreedDates,newTotal, kitten, rabbitName ], (err, result) => {
+           }); 
+           // get kitten tracker to set kitten category values
+           const getKitTrack = "SELECT * FROM tracker WHERE form = ?"
+           db.query(getKitTrack, "Kitten", (fail, pass)=> {
+               const startWeaning = parseInt(pass[0].startWeaning)
+               const endWeaning = parseInt(pass[0].endWeaning)
+               const readySell = parseInt(pass[0].readySell)
+               const seperateGender = parseInt(pass[0].seperateGender)
+               const seperateCage = parseInt(pass[0].seperateCage)
+               const okToBreed = parseInt(pass[0].okToBreed)
+   
+               const startDate =new Date(selectedDate);
+               startDate.setDate(startDate.getDate() + startWeaning);
+               const startDates = startDate.toString().substring(0, 15);
+
+               const endDate =new Date(selectedDate);
+               endDate.setDate(endDate.getDate() + (startWeaning + endWeaning));
+               const endDates = endDate.toString().substring(0, 15);
+
+               const readyDate =new Date(selectedDate);
+               readyDate.setDate(readyDate.getDate() + (startWeaning + endWeaning + readySell));
+               const readyDates = readyDate.toString().substring(0, 15);
+
+               const seperateGDate =new Date(selectedDate);
+               seperateGDate.setDate(seperateGDate.getDate() + (startWeaning + endWeaning + readySell + seperateGender));
+               const seperateGDates = seperateGDate.toString().substring(0, 15);
+
+               const seperateCDate =new Date(selectedDate);
+               seperateCDate.setDate(seperateCDate.getDate() + (startWeaning + endWeaning + readySell + seperateGender + seperateCage));
+               const seperateCDates = seperateCDate.toString().substring(0, 15);
+   
+               const okToBreedDate =new Date(selectedDate);
+               okToBreedDate.setDate(okToBreedDate.getDate() + (startWeaning + endWeaning + readySell + seperateGender + seperateCage + okToBreed));
+               const okToBreedDates = okToBreedDate.toString().substring(0, 15);
+           
+           const checkKitten = "SELECT * FROM kittenlist WHERE name = ?"
+           db.query(checkKitten, kitCategory,(abs, pres)=>{
+             if(pres.length > 0){
+               res.send({message: "exist"})
+             }
+             else{
+                 //insert kitten
+                  const insertKitten = "INSERT INTO kittenlist (name, parentDoe, parentBuck, description, count, dateProduced, startWeaning, endWeaning, readyForSale, seperateG, seperateC, okToBreed, form) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                  db.query(insertKitten,[kitCategory,rabbitName,buckBredWith,description, kitten,selectedDate,startDates, endDates, readyDates, seperateGDates, seperateCDates, okToBreedDates, "Kitten"], (err, resu)=>{console.log(err); console.log(resu)});
+
+                  //set schedule
+                  const schedule = `Start Weaning ${kitCategory}`;
+                  const schedul = `End Weaning ${kitCategory}`;
+                  const sched = `Seperate ${kitCategory} by Gender`;
+                  const sche = `Seperate ${kitCategory} by Cage`;
+                  
+                  const insertSchedule = "INSERT INTO schedules (schedule, date) VALUES (?,?)"
+                  db.query(insertSchedule, [schedule, startDates]);
+                  db.query(insertSchedule, [schedul, endDates]);
+                  db.query(insertSchedule, [sched, seperateGDates]);
+                  db.query(insertSchedule, [sche, seperateCDates]);
+                  res.send({message: "available"})
+
+                // set activity
+                const date = new Date().toString();
+                const activity = `${kitCategory} is added to kitten list`
+                const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+                db.query(sqlActivity, [activity, date]);
+             }
+           })
+        })
+        const date = new Date().toString();
+        const activity = `${rabbitName} state is changed to ${selectedState}`
+        const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+        db.query(sqlActivity, [activity, date])
       }) 
 
       }
      
-    }
-    
+    } 
 });
 
+//add kitten
+
+app.post("/addKitten", async (req, res) =>{
+  
+  const {kitCategory, doeName, buckName, kitten, description, dateProduced} = req.body
+  console.log(dateProduced)
+  const getKitTrack = "SELECT * FROM tracker WHERE form = ?"
+      db.query(getKitTrack, "Kitten", (fail, pass)=> {
+          const startWeaning = parseInt(pass[0].startWeaning)
+          const endWeaning = parseInt(pass[0].endWeaning)
+          const readySell = parseInt(pass[0].readySell)
+          const seperateGender = parseInt(pass[0].seperateGender)
+          const seperateCage = parseInt(pass[0].seperateCage)
+          const okToBreed = parseInt(pass[0].okToBreed)
+
+          const startDate =new Date(dateProduced);
+          startDate.setDate(startDate.getDate() + startWeaning);
+          const startDates = startDate.toString().substring(0, 15);
+
+          const endDate =new Date(dateProduced);
+          endDate.setDate(endDate.getDate() + (startWeaning + endWeaning));
+          const endDates = endDate.toString().substring(0, 15);
+
+          const readyDate =new Date(dateProduced);
+          readyDate.setDate(readyDate.getDate() + (startWeaning + endWeaning + readySell));
+          const readyDates = readyDate.toString().substring(0, 15);
+
+          const seperateGDate =new Date(dateProduced);
+          seperateGDate.setDate(seperateGDate.getDate() + (startWeaning + endWeaning + readySell + seperateGender));
+          const seperateGDates = seperateGDate.toString().substring(0, 15);
+
+          const seperateCDate =new Date(dateProduced);
+          seperateCDate.setDate(seperateCDate.getDate() + (startWeaning + endWeaning + readySell + seperateGender + seperateCage));
+          const seperateCDates = seperateCDate.toString().substring(0, 15);
+
+          const okToBreedDate =new Date(dateProduced);
+          okToBreedDate.setDate(okToBreedDate.getDate() + (startWeaning + endWeaning + readySell + seperateGender + seperateCage + okToBreed));
+          const okToBreedDates = okToBreedDate.toString().substring(0, 15);
+
+         
+
+          //insert kitten
+          const checkKitten = "SELECT * FROM kittenlist WHERE name = ?"
+           db.query(checkKitten, kitCategory,(abs, pres)=>{
+             if(pres.length > 0){
+               res.send({message: "exist"})
+             }
+             else{
+              res.send({message: "available"})
+
+              //update number of kitten in count table
+                const count = "SELECT COUNT (*) as count from kittenlist"
+                db.query(count, (abs2, pre2) =>{
+                  const num = pre2[0].count + 1;
+                  if (num > 0){
+                    const countupdate = "UPDATE count SET number = ? WHERE name = ?"
+                    db.query(countupdate, [num, "Kitten"], (abs, pre) =>{
+                      
+                    })
+                  }
+                });
+                  const insertKitten = "INSERT INTO kittenlist (name, parentDoe, parentBuck, description, count, dateProduced, startWeaning, endWeaning, readyForSale, seperateG, seperateC, okToBreed, form) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                  db.query(insertKitten,[kitCategory,doeName,buckName,description, kitten,dateProduced,startDates, endDates, readyDates, seperateGDates, seperateCDates, okToBreedDates, "Kitten"]);
+                  
+                  const schedule = `Start Weaning ${kitCategory}`;
+                  const schedul = `End Weaning ${kitCategory}`;
+                  
+                  const sched = `Seperate ${kitCategory} by Gender`;
+                  const sche = `Seperate ${kitCategory} by Cage`;
+                  
+                  const insertSchedule = "INSERT INTO schedules (schedule, date) VALUES (?,?)"
+                  db.query(insertSchedule, [schedule, startDates]);
+                  db.query(insertSchedule, [schedul, endDates]);
+                  
+                  db.query(insertSchedule, [sched, seperateGDates]);
+                  db.query(insertSchedule, [sche, seperateCDates]);
+                  
+          
+                  const date = new Date().toString();
+                  const activity = `${kitCategory} is added to kitten list`
+                  const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+                  db.query(sqlActivity, [activity, date]);
+
+                  
+             }
+            })
+  })
+})
 // update rabbit state from available to bred
   app.put("/breed", async (req, res) => {
     const values = req.body;
@@ -284,7 +435,7 @@ app.put("/updateDoe", async (req, res) => {
         const numberOfDays = parseInt(val)
         const expectedReadyDate =new Date(dates)
         expectedReadyDate.setDate(expectedReadyDate.getDate() + numberOfDays);
-        const expectedReady = expectedReadyDate.toString()
+        const expectedReady = expectedReadyDate.toString().substring(0, 15)
 
         if (expectedReadyDate){
           const sqlUpdate = "UPDATE bucklist SET state = ?, doeBredWith = ?, dateCrossed = ?, expectedReadyDate = ? WHERE name = ? ";
@@ -302,7 +453,7 @@ app.put("/updateDoe", async (req, res) => {
             
             const checkPregDate =new Date(dates);
             checkPregDate.setDate(checkPregDate.getDate() + checkPreg);
-            const checkPregDates = checkPregDate.toString();
+            const checkPregDates = checkPregDate.toString().substring(0, 15);
         
           const sqlUpdateDoe = "UPDATE doelist SET state = ?, buckBredWith = ?, dateCrossed = ?, checkPreg = ? WHERE name = ? ";
            db.query(sqlUpdateDoe, [state, rabbitName, dates, checkPregDates, selectedRabbit ], (err, result) => {
@@ -330,7 +481,7 @@ app.put("/updateDoe", async (req, res) => {
 
         const checkPregDate =new Date(dates);
         checkPregDate.setDate(checkPregDate.getDate() + checkPreg);
-        const checkPregDates = checkPregDate.toString();
+        const checkPregDates = checkPregDate.toString().substring(0, 15);
 
         if (checkPreg){
             const sqlUpdate = "UPDATE doelist SET state = ?, buckBredWith = ?, dateCrossed = ?, checkPreg = ? WHERE name = ? ";
@@ -347,7 +498,7 @@ app.put("/updateDoe", async (req, res) => {
               const numberOfDays = parseInt(val)
               const expectedReadyDate =new Date(dates)
               expectedReadyDate.setDate(expectedReadyDate.getDate() + numberOfDays);
-              const expectedReady = expectedReadyDate.toString()
+              const expectedReady = expectedReadyDate.toString().substring(0, 15)
 
             const sqlUpdateBuck = "UPDATE bucklist SET state = ?, doeBredWith = ?, dateCrossed = ?, expectedReadyDate = ? WHERE name = ? ";
             db.query(sqlUpdateBuck, [state, rabbitName, dates, expectedReady, selectedRabbit ], (err, result) => {
@@ -425,10 +576,41 @@ app.put("/updateDoe", async (req, res) => {
        });
     }
   });
+  app.put("/updateKitten", async (req, res)=>{
+    const {rabbitName, date, number, num, buyer, option, price,description} = req.body;
+            const total = parseInt(number) - parseInt(num)
+            const sqlUpdate = "UPDATE kittenlist set count = ? WHERE name = ?";
+            await db.query(sqlUpdate, [total,rabbitName], (err, result) => {
+              res.send(result); 
+            });
+
+            if (option == "Sold"){
+                const sqlInsert = "INSERT INTO sales (rabbitName, buyer, quantity, price, description, date) VALUES (?,?,?,?,?,?)"
+                await db.query(sqlInsert, [rabbitName,buyer,num, price, description, date], (err, result) => {
+                });
+               
+                const dates = new Date().toString();
+                const activity = `${num} of ${rabbitName} Got Sold`
+                const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+                db.query(sqlActivity, [activity, dates], (err, result) => {
+                  
+                });
+              }
+              
+            else{
+                const dates = new Date().toString();
+                const activity = `${num} of ${rabbitName} is removed (death)`
+                const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+                db.query(sqlActivity, [activity, dates], (err, result) => {
+                  
+                });
+              }
+      
+  })
 
 // delete from rabbit table and insert it into deleterabbit table
   app.put("/delete", async (req, res) => {
-    const {rabbitName, date, buyer, form, price,description, option} = req.body;
+    const {rabbitName, date, form, state, buyer, option, price,description} = req.body;
     //buck start here...  
     if (form == "Buck")
         {
@@ -442,15 +624,15 @@ app.put("/updateDoe", async (req, res) => {
                 const num = pre2[0].count -1;
                   if (num > 0){
                     const countupdate = "UPDATE count SET number = ? WHERE name = ?"
-                    db.query(countupdate, [num, "Buck"], (abs, pre) =>{})
+                    db.query(countupdate, [num, "Buck"])
                     }
                   });
 
                 if (option == "Sold")
                   {
-                      const sqlInsert = "INSERT INTO sales (rabbitName, buyer, price, description, date) VALUES (?,?,?,?)"
-                      await db.query(sqlInsert, [rabbitName,buyer, price, description, date], (err, result) => {
-                      });
+                    const sqlInsert = "INSERT INTO sales (rabbitName, buyer, price, description, date) VALUES (?,?,?,?,?)"
+                    await db.query(sqlInsert, [rabbitName,buyer, price, description, date], (err, result) => {
+                    });
                       const sqlInsertDelete = "INSERT INTO deleterabbit (name, whyDelete, dateDelete) VALUES (?,?,?)"
                       await db.query(sqlInsertDelete, [rabbitName, option,date], (err, result) => {
                       });
@@ -475,7 +657,7 @@ app.put("/updateDoe", async (req, res) => {
           }
           //buck end here...
           //doe start here...
-      else{
+      else if (form == "Doe"){
               const sqlDelete = "DELETE FROM doelist WHERE name = ? ";
               await db.query(sqlDelete, rabbitName, (err, result) => {
                 res.send(result); 
@@ -492,8 +674,8 @@ app.put("/updateDoe", async (req, res) => {
                 });
 
               if (option == "Sold"){
-                  const sqlInsert = "INSERT INTO sales (rabbitName, price, description, date) VALUES (?,?,?,?)"
-                  await db.query(sqlInsert, [rabbitName, price,description, date], (err, result) => {
+                  const sqlInsert = "INSERT INTO sales (rabbitName, buyer, price, description, date) VALUES (?,?,?,?,?)"
+                  await db.query(sqlInsert, [rabbitName,buyer, price, description, date], (err, result) => {
                   });
                   const sqlInsertDelete = "INSERT INTO deleterabbit (name, whyDelete, dateDelete) VALUES (?,?,?)"
                   await db.query(sqlInsertDelete, [rabbitName, option,date], (err, result) => {
@@ -521,7 +703,134 @@ app.put("/updateDoe", async (req, res) => {
                 }
         }    
         //doe ends here...
+        //Weaner start here...
+            else if (form == "Weaner"){
+                const sqlDelete = "DELETE FROM weanerlist WHERE name = ? ";
+                await db.query(sqlDelete, rabbitName, (err, result) => {
+                  res.send(result); 
+                });
+                  const count = "SELECT COUNT (*) as count from weanerlist"
+                  db.query(count, (abs2, pre2) =>{
+                    const num = pre2[0].count - 1;
+                    if (num > 0){
+                      const countupdate = "UPDATE count SET number = ? WHERE name = ?"
+                      db.query(countupdate, [num, "Weaner"])
+                    }
+                  });
+
+                if (option == "Sold"){
+                    const sqlInsert = "INSERT INTO sales (rabbitName, buyer, price, description, date) VALUES (?,?,?,?,?)"
+                    await db.query(sqlInsert, [rabbitName,buyer, price, description, date], (err, result) => {
+                    });
+                    const sqlInsertDelete = "INSERT INTO deleterabbit (name, whyDelete, dateDelete) VALUES (?,?,?)"
+                    await db.query(sqlInsertDelete, [rabbitName, option,date], (err, result) => {
+                    }); 
+
+                    const dates = new Date().toString();
+                    const activity = `${rabbitName} Got Sold`
+                    const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+                    db.query(sqlActivity, [activity, dates], (err, result) => {
+                      
+                    });
+                  }
+                  
+                else{
+                    const sqlInsert = "INSERT INTO deleterabbit (name, whyDelete, dateDelete) VALUES (?,?,?)"
+                    await db.query(sqlInsert, [rabbitName, option,date], (err, result) => {
+                    });
+
+                    const dates = new Date().toString();
+                    const activity = `${rabbitName} is removed (death)`
+                    const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+                    db.query(sqlActivity, [activity, dates], (err, result) => {
+                      
+                    });
+                  }
+          }
+        //Weaner end here...
+        //start kitten here...
+        else{
+            const sqlDelete = "DELETE FROM kittenlist WHERE name = ? ";
+            await db.query(sqlDelete, rabbitName, (err, result) => {
+              res.send(result); 
+            });
+
+            const count = "SELECT COUNT (*) as count from kittenlist"
+            db.query(count, (abs2, pre2) =>{
+              const num = pre2[0].count - 1;
+              if (num > 0){
+                const countupdate = "UPDATE count SET number = ? WHERE name = ?"
+                db.query(countupdate, [num, "Kitten"], (abs, pre) =>{
+                  console.log(abs)
+                })
+              }
+            });
+
+            if (option == "Sold"){
+                const sqlInsert = "INSERT INTO sales (rabbitName, buyer, price, description, date) VALUES (?,?,?,?,?)"
+                await db.query(sqlInsert, [rabbitName,buyer, price, description, date], (err, result) => {
+                });
+                const sqlInsertDelete = "INSERT INTO deleterabbit (name, whyDelete, dateDelete) VALUES (?,?,?)"
+                await db.query(sqlInsertDelete, [rabbitName, option,date], (err, result) => {
+                }); 
+
+                const dates = new Date().toString();
+                const activity = `${rabbitName} Got Sold`
+                const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+                db.query(sqlActivity, [activity, dates], (err, result) => {
+                  
+                });
+              }
+              
+            else{
+                const sqlInsert = "INSERT INTO deleterabbit (name, whyDelete, dateDelete) VALUES (?,?,?)"
+                await db.query(sqlInsert, [rabbitName, option,date], (err, result) => {
+                });
+
+                const dates = new Date().toString();
+                const activity = `${rabbitName} is removed (death)`
+                const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+                db.query(sqlActivity, [activity, dates], (err, result) => {
+                  
+                });
+              }
+      }
+        //end kitten here...
     });
+
+  // insert weaner
+  app.post("/addWeaner", async (req, res) =>{
+    const {name, description,gender,dateRegistered, okToBreed} = req.body;
+    const check = "SELECT * FROM weanerlist WHERE name = ?"
+    const insertWeaner = "INSERT INTO weanerlist (name, description, gender, dateRegistered, okToBreed, form) VALUES (?,?,?,?,?,?)"
+    db.query(check, name, (abs, pre)=>{
+      if(pre.length > 0){
+        res.send({message: "exist"})
+      }
+      else{
+        
+        const count = "SELECT COUNT (*) as count from weanerlist"
+        db.query(count, (abs2, pre2) =>{
+          const num = pre2[0].count + 1;
+          if (num > 0){
+            const countupdate = "UPDATE count SET number = ? WHERE name = ?"
+            db.query(countupdate, [num, "Weaner"])
+          }
+        });
+
+        db.query(insertWeaner, [name, description,gender,dateRegistered, okToBreed, "Weaner"], (err, result) =>{
+          console.log(err)
+        })
+        res.send({message: 'available'});
+
+        const dates = new Date().toString();
+        const activity = `${name} is added to weaner list`
+        const sqlActivity = "INSERT INTO activity_report (activity, date) VALUES (?,?)";
+        db.query(sqlActivity, [activity, dates])
+      }
+    })
+   
+  })
 
   //add mediaction from rabbit
   app.post("/medication", async (req, res) => {
@@ -563,7 +872,7 @@ app.put("/updateDoe", async (req, res) => {
     });
   })
 
-   //get available Rabbit
+   //get report
    app.get("/getReport", async (req, res) =>{
     const select = "SELECT * FROM activity_report ORDER BY id DESC"
     await db.query (select, (err, result)=>{
@@ -572,8 +881,20 @@ app.put("/updateDoe", async (req, res) => {
   })
 
    //get available Rabbit
+   app.get("/getTodo", async (req, res) =>{
+    const date = new Date().toString().substring(0, 15);
+    const select = "SELECT * FROM schedules WHERE date = ?"
+    await db.query (select, date, (err, result)=>{
+      res.send(result);
+      console.log(err)
+      console.log(result)
+      console.log(date)
+    });
+  })
+
+   //get sale
    app.get("/getSales", async (req, res) =>{
-    const select = "SELECT * FROM sales"
+    const select = "SELECT * FROM sales ORDER BY id DESC "
     await db.query (select, (err, result)=>{
       res.send(result);
     });
@@ -588,7 +909,7 @@ app.put("/updateDoe", async (req, res) => {
   });
   
   app.get("/getWeaners", async (req, res) => {
-    const sqlSelect = "SELECT * FROM weanerlist";
+    const sqlSelect = "SELECT * FROM weanerlist ORDER BY id DESC";
     await db.query(sqlSelect, (err, result) => {
       res.send(result);
     });
@@ -596,7 +917,7 @@ app.put("/updateDoe", async (req, res) => {
 
   app.post("/getWeaner", async (req, res) => {
     const WeanerName = req.body.WeanerName;
-    const sqlSelect = "SELECT * FROM weanerlist WHERE categoryName = ? ";
+    const sqlSelect = "SELECT * FROM weanerlist WHERE name = ? ";
     await db.query(sqlSelect, WeanerName, (err, result) => {
       res.send(result);
     });
